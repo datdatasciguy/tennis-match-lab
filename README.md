@@ -19,8 +19,16 @@ The download prints the folder to use in place of `<source-commit>`. Add
 `--include-points` if you also want the point-by-point files; the full snapshot
 used here is about 494 MB.
 
-You can also use `--tour w` for the women's data or `--before 20100101` to keep
-matches played before that date.
+You can use `--tour w` for the women's data. For a 2010s grass-and-clay sample:
+
+```bash
+python compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --surface Clay --from-date 20100101 --before 20200101
+```
+
+Repeat `--surface` to include more than one. `--from-date` includes its date;
+`--before` stops just short of its date. The output shows how many charted matches
+passed the filters, how many have player stats, and each player's match and point
+counts. These samples can be uneven, so check the counts before comparing rates.
 
 The [player comparison notebook](notebooks/player_comparison.ipynb) has a Federer
 and Nadal example. To get the same data it used:
