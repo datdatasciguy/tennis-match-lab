@@ -1,14 +1,14 @@
 import argparse
-from hashlib import sha256
 import json
+from hashlib import sha256
 from pathlib import Path
-
 
 def verify(folder):
     folder = Path(folder)
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     if not manifest["complete"]:
         raise ValueError("Snapshot is incomplete")
+    # Check file size and contents against the saved download
     for row in manifest["files"]:
         path = folder / row["file"]
         if Path(row["file"]).name != row["file"]:
@@ -21,8 +21,11 @@ def verify(folder):
             raise ValueError("Snapshot file changed: " + row["file"])
     return len(manifest["files"])
 
-
-if __name__ == "__main__":
+def main():
+    # Arguments
     parser = argparse.ArgumentParser(description="Check a downloaded snapshot against its manifest.")
     parser.add_argument("folder", type=Path)
     print("Verified files:", verify(parser.parse_args().folder))
+
+if __name__ == "__main__":
+    main()

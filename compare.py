@@ -1,19 +1,22 @@
 import argparse
-from datetime import datetime
 import json
+from datetime import datetime
 from pathlib import Path
 
 from clean import load_data
 
+# Columns used for serve and return rates
+STAT_COLUMNS = [
+    "serve_pts", "aces", "dfs", "first_in", "first_won", "second_won",
+    "return_pts", "return_pts_won", "bk_pts", "bp_saved",
+]
 
 def rate(numerator, denominator):
     return numerator / denominator if denominator else None
 
-
 def summarize(rows):
-    columns = ["serve_pts", "aces", "dfs", "first_in", "first_won", "second_won",
-               "return_pts", "return_pts_won", "bk_pts", "bp_saved"]
-    totals = {column: sum(int(row[column]) for row in rows) for column in columns}
+    # Sum points before calculating rates
+    totals = {column: sum(int(row[column]) for row in rows) for column in STAT_COLUMNS}
     return {
         "matches": len(rows),
         "serve_points": totals["serve_pts"],
@@ -28,13 +31,14 @@ def summarize(rows):
         "break_points_saved": rate(totals["bp_saved"], totals["bk_pts"]),
     }
 
-
 def compare(folder, players, tour="m", surface=None, before=None):
     if tour not in {"m", "w"}:
         raise ValueError("Tour must be m or w")
     if before:
         datetime.strptime(before, "%Y%m%d")
     matches, rows, audit = load_data(folder, tour)
+
+    # Filter matches for each player
     selected = {player: [] for player in players}
     for row in rows:
         player = row["player"]
@@ -46,11 +50,11 @@ def compare(folder, players, tour="m", surface=None, before=None):
         if before and match["Date"] >= before:
             continue
         selected[player].append(row)
-    return {"players": {player: summarize(rows) for player, rows in selected.items()},
-            "audit": audit}
+    summaries = {player: summarize(player_rows) for player, player_rows in selected.items()}
+    return {"players": summaries, "audit": audit}
 
-
-if __name__ == "__main__":
+def main():
+    # Arguments
     parser = argparse.ArgumentParser(description="Compare players in the charted-match sample.")
     parser.add_argument("folder", type=Path)
     parser.add_argument("players", nargs="+")
@@ -58,5 +62,8 @@ if __name__ == "__main__":
     parser.add_argument("--surface")
     parser.add_argument("--before", help="Exclusive date cutoff, YYYYMMDD")
     args = parser.parse_args()
-    print(json.dumps(compare(args.folder, args.players, args.tour,
-                             args.surface, args.before), indent=2, allow_nan=False))
+    result = compare(args.folder, args.players, args.tour, args.surface, args.before)
+    print(json.dumps(result, indent=2, allow_nan=False))
+
+if __name__ == "__main__":
+    main()
