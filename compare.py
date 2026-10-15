@@ -2,6 +2,7 @@ import argparse
 import json
 from datetime import datetime
 from pathlib import Path
+from random import Random
 
 from clean import load_data
 
@@ -10,6 +11,10 @@ STAT_COLUMNS = [
     "serve_pts", "aces", "dfs", "first_in", "first_won", "second_won",
     "return_pts", "return_pts_won", "bk_pts", "bp_saved",
 ]
+RATE_COLUMNS = (
+    "ace_rate", "double_fault_rate", "first_serve_in", "first_serve_won",
+    "second_serve_won", "return_points_won", "break_points_saved",
+)
 SURFACES = {name.casefold(): name for name in ("Hard", "Clay", "Grass", "Carpet")}
 
 def checked_date(value, label):
@@ -74,9 +79,56 @@ def summarize(rows):
         "break_points_saved": rate(totals["bp_saved"], totals["bk_pts"]),
     }
 
-def compare(folder, players, tour="m", surface=None, before=None, from_date=None):
+
+def percentile(values, fraction):
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * fraction
+    lower = int(position)
+    weight = position - lower
+    if lower == len(ordered) - 1:
+        return ordered[lower]
+    return ordered[lower] * (1 - weight) + ordered[lower + 1] * weight
+
+
+def bootstrap_intervals(rows, draws=2000, confidence=0.95, seed=42):
+    if draws < 100:
+        raise ValueError("Bootstrap draws must be at least 100")
+    if not 0 < confidence < 1:
+        raise ValueError("Confidence must be between 0 and 1")
+    result = {"method": "match bootstrap percentile", "confidence": confidence,
+              "draws": draws, "seed": seed, "matches": len(rows), "rates": {}}
+    if len(rows) < 5:
+        result["note"] = "Fewer than five charted matches; intervals withheld"
+        result["rates"] = {name: None for name in RATE_COLUMNS}
+        return result
+
+    rng = Random(seed)
+    estimates = {name: [] for name in RATE_COLUMNS}
+    for _ in range(draws):
+        sample = rng.choices(rows, k=len(rows))
+        summary = summarize(sample)
+        for name in RATE_COLUMNS:
+            if summary[name] is not None:
+                estimates[name].append(summary[name])
+
+    tail = (1 - confidence) / 2
+    for name, values in estimates.items():
+        result["rates"][name] = (
+            {"low": percentile(values, tail),
+             "high": percentile(values, 1 - tail),
+             "valid_draws": len(values)} if values else None
+        )
+    return result
+
+
+def compare(folder, players, tour="m", surface=None, before=None, from_date=None,
+            bootstrap=0, confidence=0.95, seed=42):
     if tour not in {"m", "w"}:
         raise ValueError("Tour must be m or w")
+    if bootstrap and bootstrap < 100:
+        raise ValueError("Bootstrap draws must be at least 100")
+    if bootstrap and not 0 < confidence < 1:
+        raise ValueError("Confidence must be between 0 and 1")
     matches, rows, audit = load_data(folder, tour)
     matches = filter_matches(matches, surface, from_date, before)
     surfaces = normalized_surfaces(surface)
@@ -93,6 +145,10 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
             continue
         selected[player].append(row)
     summaries = {player: summarize(player_rows) for player, player_rows in selected.items()}
+    if bootstrap:
+        for player, player_rows in selected.items():
+            summaries[player]["intervals"] = bootstrap_intervals(
+                player_rows, bootstrap, confidence, seed)
     return {
         "filters": {"tour": tour, "surfaces": sorted(surfaces) if surfaces else None,
                     "from_date": from_date, "before": before},
@@ -111,10 +167,17 @@ def main():
     parser.add_argument("--surface", action="append", help="Repeat to include multiple surfaces")
     parser.add_argument("--from-date", help="Inclusive start date, YYYYMMDD")
     parser.add_argument("--before", help="Exclusive date cutoff, YYYYMMDD")
+    parser.add_argument("--bootstrap", type=int, default=0,
+                        help="Match-level resamples for pooled-rate intervals (at least 100)")
+    parser.add_argument("--confidence", type=float, default=0.95,
+                        help="Interval level when bootstrapping (default: 0.95)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for repeatable intervals (default: 42)")
     args = parser.parse_args()
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
-                         args.before, args.from_date)
+                         args.before, args.from_date, args.bootstrap,
+                         args.confidence, args.seed)
     except ValueError as error:
         parser.exit(2, f"{error}\n")
     print(json.dumps(result, indent=2, allow_nan=False))
