@@ -15,6 +15,13 @@ RATE_COLUMNS = (
     "ace_rate", "double_fault_rate", "first_serve_in", "first_serve_won",
     "second_serve_won", "return_points_won", "break_points_saved",
 )
+RATE_LABELS = {
+    "ace_rate": "Aces", "double_fault_rate": "Double faults",
+    "first_serve_in": "First serves in", "first_serve_won": "First serves won",
+    "second_serve_won": "Second serves won",
+    "return_points_won": "Return points won",
+    "break_points_saved": "Break points saved",
+}
 SURFACES = {name.casefold(): name for name in ("Hard", "Clay", "Grass", "Carpet")}
 
 def checked_date(value, label):
@@ -158,6 +165,45 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
         "audit": audit,
     }
 
+def format_markdown(result):
+    # Keep the sample size beside every displayed rate
+    players = result["players"]
+    headings = []
+    for player, values in players.items():
+        safe_name = player.replace("|", "\\|")
+        headings.append(
+            f"{safe_name}<br>{values['matches']} matches, "
+            f"{values['serve_points']:,} serve pts, "
+            f"{values['return_points']:,} return pts"
+        )
+    lines = ["| Rate | " + " | ".join(headings) + " |",
+             "| --- | " + " | ".join("---" for _ in players) + " |"]
+    for name in RATE_COLUMNS:
+        cells = []
+        for values in players.values():
+            point = values[name]
+            if point is None:
+                cells.append("n/a")
+                continue
+            cell = f"{point:.1%}"
+            intervals = values.get("intervals")
+            if intervals:
+                bounds = intervals["rates"][name]
+                if bounds:
+                    cell += f" ({bounds['low']:.1%}–{bounds['high']:.1%})"
+                    if bounds["valid_draws"] != intervals["draws"]:
+                        cell += f" [{bounds['valid_draws']}/{intervals['draws']} draws]"
+                else:
+                    cell += " (interval unavailable)"
+            cells.append(cell)
+        lines.append("| " + RATE_LABELS[name] + " | " + " | ".join(cells) + " |")
+    if any("intervals" in values for values in players.values()):
+        confidence = next(values["intervals"]["confidence"] for values in players.values()
+                          if "intervals" in values)
+        lines.append(f"\nParentheses show {confidence:.0%} match-bootstrap intervals.")
+    return "\n".join(lines)
+
+
 def main():
     # Arguments
     parser = argparse.ArgumentParser(description="Compare players in the charted-match sample.")
@@ -173,6 +219,8 @@ def main():
                         help="Interval level when bootstrapping (default: 0.95)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for repeatable intervals (default: 42)")
+    parser.add_argument("--markdown", action="store_true",
+                        help="Print a comparison table instead of JSON")
     args = parser.parse_args()
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
@@ -180,7 +228,10 @@ def main():
                          args.confidence, args.seed)
     except ValueError as error:
         parser.exit(2, f"{error}\n")
-    print(json.dumps(result, indent=2, allow_nan=False))
+    if args.markdown:
+        print(format_markdown(result))
+    else:
+        print(json.dumps(result, indent=2, allow_nan=False))
 
 if __name__ == "__main__":
     main()

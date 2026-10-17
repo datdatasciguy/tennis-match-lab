@@ -33,14 +33,16 @@ counts. These samples can be uneven, so check the counts before comparing rates.
 For a feel for how much the pooled rates move when matches are resampled:
 
 ```bash
-python compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --bootstrap 2000 --seed 42
+python compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --bootstrap 2000 --seed 42 --markdown
 ```
 
-The optional `intervals` field gives a 95% match-bootstrap interval for each
-rate, along with the number of usable draws. It resamples whole charted matches,
-then recalculates the pooled point rate each time. Fewer than five matches get no
-interval. This shows variation within the selected charted sample; it does not
-fix uneven opponent or match coverage or describe a player's full career.
+The table puts each player's match and point counts beside all seven rates and
+their 95% intervals. Leave off `--markdown` for JSON output, where the optional
+`intervals` field also gives the number of usable draws. The calculation
+resamples whole charted matches, then recalculates each pooled point rate.
+Fewer than five matches get no interval. This shows variation within the
+selected charted sample; it does not fix uneven opponent or match coverage
+or describe a player's full career.
 
 The [player comparison notebook](notebooks/player_comparison.ipynb) has a Federer
 and Nadal example. To get the same data it used:
