@@ -44,6 +44,20 @@ Fewer than five matches get no interval. This shows variation within the
 selected charted sample; it does not fix uneven opponent or match coverage
 or describe a player's full career.
 
+## Check the sample coverage
+
+Before reading a rate comparison, see where the charted matches and usable stats
+actually fall:
+
+```bash
+python season_coverage.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --markdown
+```
+
+The table groups matches by season and surface. It shows missing player stats
+and serve/return point counts, so a sparse year does not disappear inside a
+pooled rate. These are matches in the charting snapshot, not all matches those
+players played. A missing season means no charted match passed your filters.
+
 The [player comparison notebook](notebooks/player_comparison.ipynb) has a Federer
 and Nadal example. To get the same data it used:
 
