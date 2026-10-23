@@ -68,6 +68,25 @@ python download.py --commit 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
 Install Jupyter if you'd like to run the notebook. `verify.py` can check a
 download if something looks off.
 
+## Explore charted points
+
+If you downloaded with `--include-points`, stream point features from the raw
+shot codes without loading the full snapshot into memory:
+
+```bash
+python point_features.py data/raw/<source-commit> --match-id 20191124-M-Davis_Cup_Finals-F-Rafael_Nadal-Denis_Shapovalov --max-points 5
+python point_features.py data/raw/<source-commit> --output data/point-features.jsonl
+```
+
+The first command prints five point rows; the second writes the full men's
+snapshot to a new ignored JSONL file. Add `--tour w` for the women's files.
+Each row includes serve number and direction, coded shot counts and types,
+the return shot, and the point ending where marked. `coded_shots` counts only
+the common shot symbols in the [source's charting guide](https://www.tennisabstract.com/blog/2015/09/23/the-match-charting-project-quick-start-guide/); check
+`unclassified_codes` before treating it as a complete rally length. The script
+prints skipped and partial-parse counts to stderr and never overwrites an
+existing output file. Keep the derived point rows local under `data/`.
+
 ## A couple of details
 
 The rates come from total points, rather than averaging match percentages.
