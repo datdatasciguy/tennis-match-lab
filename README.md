@@ -87,6 +87,20 @@ the common shot symbols in the [source's charting guide](https://www.tennisabstr
 prints skipped and partial-parse counts to stderr and never overwrites an
 existing output file. Keep the derived point rows local under `data/`.
 
+To check whether those point rows agree with the source's match summaries:
+
+```bash
+python reconcile_points.py data/raw/<source-commit>
+python reconcile_points.py data/raw/<source-commit> --exclude-single-letter
+```
+
+The report compares serve points, return points, and return points won for each
+player, with a few example gaps. The second command leaves out points coded
+only `S` or `R` to show how much those rows affect agreement. It is a diagnostic
+view, not a correction to the source. Add `--tour w` or `--match-id` to narrow
+the check. The pinned snapshot still has differences after that exclusion, so
+check the report before using match-level point features as exact totals.
+
 ## A couple of details
 
 The rates come from total points, rather than averaging match percentages.
