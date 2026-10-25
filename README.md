@@ -101,6 +101,24 @@ view, not a correction to the source. Add `--tour w` or `--match-id` to narrow
 the check. The pinned snapshot still has differences after that exclusion, so
 check the report before using match-level point features as exact totals.
 
+## First style view
+
+The style view combines pooled overview rates with a few features from points
+whose shot codes the extractor recognizes:
+
+```bash
+python style_vectors.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --from-date 20100101 --before 20200101
+```
+
+It shows each player's overview matches and point counts separately from the
+usable shot-coded point sample. The shot view includes average coded shots after
+the serve, the share of short coded points, and forehand/backhand return mix.
+Unparsed and unfamiliar-code rows stay visible as counts. A rate is `null`
+when its own denominator is below 30; change that display cutoff with
+`--minimum`. These are descriptive charted-sample features, not complete rally
+lengths or a rating of player ability. Run the reconciliation above before
+assuming point rows and match summaries agree for a particular sample.
+
 ## A couple of details
 
 The rates come from total points, rather than averaging match percentages.
