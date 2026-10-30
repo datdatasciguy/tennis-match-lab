@@ -44,6 +44,16 @@ Fewer than five matches get no interval. This shows variation within the
 selected charted sample; it does not fix uneven opponent or match coverage
 or describe a player's full career.
 
+For a compact local browser view of the same numbers:
+
+```bash
+python compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --from-date 20100101 --before 20200101 --html data/grass-comparison.html
+```
+
+Open the saved HTML file in a browser. It keeps each player's sample size beside
+the rates and shows the selected snapshot and filters. The file stays under the
+ignored `data/` folder; no raw match rows are written into it.
+
 ## Check the sample coverage
 
 Before reading a rate comparison, see where the charted matches and usable stats

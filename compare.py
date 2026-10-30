@@ -1,6 +1,7 @@
 import argparse
 import json
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from random import Random
 
@@ -204,6 +205,81 @@ def format_markdown(result):
     return "\n".join(lines)
 
 
+def format_html(result, snapshot):
+    players = result["players"]
+    filters = result["filters"]
+    surfaces = ", ".join(filters["surfaces"]) if filters["surfaces"] else "All surfaces"
+    dates = f"{filters['from_date'] or 'earliest'} to before {filters['before'] or 'latest'}"
+    selection = f"{filters['tour'].upper()} tour · {surfaces} · {dates}"
+    headings = ["<th scope='col'>Rate</th>"]
+    for player, values in players.items():
+        headings.append(
+            f"<th scope='col'>{escape(player)}<small>{values['matches']:,} matches · "
+            f"{values['serve_points']:,} serve pts · {values['return_points']:,} return pts</small></th>"
+        )
+    rows = []
+    for name in RATE_COLUMNS:
+        cells = [f"<th scope='row'>{escape(RATE_LABELS[name])}</th>"]
+        for values in players.values():
+            point = values[name]
+            if point is None:
+                cells.append("<td>n/a</td>")
+                continue
+            cell = f"<strong>{point:.1%}</strong>"
+            intervals = values.get("intervals")
+            if intervals:
+                bounds = intervals["rates"][name]
+                if bounds:
+                    cell += f"<small>{bounds['low']:.1%}–{bounds['high']:.1%} interval</small>"
+                    if bounds["valid_draws"] != intervals["draws"]:
+                        cell += f"<small>{bounds['valid_draws']}/{intervals['draws']} usable draws</small>"
+                else:
+                    cell += "<small>Interval unavailable</small>"
+            cells.append(f"<td>{cell}</td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    interval_note = ""
+    if any("intervals" in values for values in players.values()):
+        confidence = next(values["intervals"]["confidence"] for values in players.values()
+                          if "intervals" in values)
+        interval_note = f"<p>Intervals use {confidence:.0%} match-level bootstrap resampling.</p>"
+    sample = result["sample"]
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tennis Match Lab · Player comparison</title>
+<style>
+body {{ margin: 0; background: #f5f7f4; color: #172b24; font: 16px/1.5 system-ui, sans-serif; }}
+main {{ max-width: 1040px; margin: 0 auto; padding: 36px 20px 64px; }}
+h1 {{ margin-bottom: 4px; font-size: clamp(28px, 5vw, 42px); }}
+.intro {{ color: #40584e; }}
+.meta {{ display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0; }}
+.meta span {{ padding: 10px 14px; border: 1px solid #cbd9ce; border-radius: 8px; background: white; }}
+.table-wrap {{ overflow-x: auto; border: 1px solid #cbd9ce; border-radius: 10px; background: white; }}
+table {{ width: 100%; border-collapse: collapse; text-align: left; }}
+th, td {{ min-width: 130px; padding: 14px; border-bottom: 1px solid #e1e9e2; vertical-align: top; }}
+thead th {{ background: #e4eee6; }}
+tbody tr:last-child th, tbody tr:last-child td {{ border-bottom: 0; }}
+small {{ display: block; color: #4c6557; font-size: 12px; font-weight: normal; }}
+.note {{ max-width: 760px; color: #40584e; }}
+a {{ color: #145e42; }}
+</style>
+</head>
+<body>
+<main>
+<h1>Player comparison</h1>
+<p class="intro">{escape(selection)}</p>
+<div class="meta"><span>Snapshot: {escape(snapshot)}</span><span>{sample['metadata_matches']:,} charted matches in filter</span><span>{sample['matches_with_stats']:,} with usable player stats</span></div>
+<div class="table-wrap"><table><thead><tr>{''.join(headings)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+<div class="note">{interval_note}<p>Rates pool points from each player’s charted matches against all opponents. This is not a head-to-head comparison or a ranking. Volunteer charting coverage varies by player and filter.</p>
+<p>Data: <a href="https://github.com/JeffSackmann/tennis_MatchChartingProject">Match Charting Project</a> (CC BY-NC-SA 4.0).</p></div>
+</main>
+</body>
+</html>
+"""
+
+
 def main():
     # Arguments
     parser = argparse.ArgumentParser(description="Compare players in the charted-match sample.")
@@ -219,8 +295,11 @@ def main():
                         help="Interval level when bootstrapping (default: 0.95)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for repeatable intervals (default: 42)")
-    parser.add_argument("--markdown", action="store_true",
-                        help="Print a comparison table instead of JSON")
+    format_group = parser.add_mutually_exclusive_group()
+    format_group.add_argument("--markdown", action="store_true",
+                              help="Print a comparison table instead of JSON")
+    format_group.add_argument("--html", type=Path,
+                              help="Save a local HTML comparison to this path")
     args = parser.parse_args()
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
@@ -228,7 +307,14 @@ def main():
                          args.confidence, args.seed)
     except ValueError as error:
         parser.exit(2, f"{error}\n")
-    if args.markdown:
+    if args.html:
+        try:
+            args.html.parent.mkdir(parents=True, exist_ok=True)
+            args.html.write_text(format_html(result, args.folder.name), encoding="utf-8")
+        except OSError as error:
+            parser.exit(2, f"Could not save HTML: {error}\n")
+        print(args.html)
+    elif args.markdown:
         print(format_markdown(result))
     else:
         print(json.dumps(result, indent=2, allow_nan=False))
