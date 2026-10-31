@@ -51,8 +51,9 @@ python compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surf
 ```
 
 Open the saved HTML file in a browser. It keeps each player's sample size beside
-the rates and shows the selected snapshot and filters. The file stays under the
-ignored `data/` folder; no raw match rows are written into it.
+the rates, then shows season-by-season charted matches and missing stats. The
+snapshot retrieval date comes from the download manifest when available. The
+file stays under the ignored `data/` folder; no raw match rows are written into it.
 
 ## Check the sample coverage
 

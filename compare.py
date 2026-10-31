@@ -153,6 +153,18 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
             continue
         selected[player].append(row)
     summaries = {player: summarize(player_rows) for player, player_rows in selected.items()}
+    coverage = {}
+    for player, player_rows in selected.items():
+        stat_ids = {row["match_id"] for row in player_rows}
+        seasons = {}
+        for match_id, match in matches.items():
+            if player not in {match["Player 1"], match["Player 2"]}:
+                continue
+            season = match["Date"][:4]
+            counts = seasons.setdefault(season, {"charted": 0, "with_stats": 0})
+            counts["charted"] += 1
+            counts["with_stats"] += match_id in stat_ids
+        coverage[player] = dict(sorted(seasons.items()))
     if bootstrap:
         for player, player_rows in selected.items():
             summaries[player]["intervals"] = bootstrap_intervals(
@@ -163,6 +175,7 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
         "sample": {"metadata_matches": len(matches),
                    "matches_with_stats": len(matches_with_stats)},
         "players": summaries,
+        "coverage": coverage,
         "audit": audit,
     }
 
@@ -205,7 +218,7 @@ def format_markdown(result):
     return "\n".join(lines)
 
 
-def format_html(result, snapshot):
+def format_html(result, snapshot, retrieved_at=None):
     players = result["players"]
     filters = result["filters"]
     surfaces = ", ".join(filters["surfaces"]) if filters["surfaces"] else "All surfaces"
@@ -243,6 +256,15 @@ def format_html(result, snapshot):
                           if "intervals" in values)
         interval_note = f"<p>Intervals use {confidence:.0%} match-level bootstrap resampling.</p>"
     sample = result["sample"]
+    coverage_rows = []
+    for player, seasons in result["coverage"].items():
+        for season, counts in seasons.items():
+            coverage_rows.append(
+                f"<tr><th scope='row'>{escape(player)}</th><td>{season}</td>"
+                f"<td>{counts['charted']:,}</td><td>{counts['with_stats']:,}</td>"
+                f"<td>{counts['charted'] - counts['with_stats']:,}</td></tr>"
+            )
+    retrieval = retrieved_at[:10] if isinstance(retrieved_at, str) else "unavailable"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -270,9 +292,13 @@ a {{ color: #145e42; }}
 <main>
 <h1>Player comparison</h1>
 <p class="intro">{escape(selection)}</p>
-<div class="meta"><span>Snapshot: {escape(snapshot)}</span><span>{sample['metadata_matches']:,} charted matches in filter</span><span>{sample['matches_with_stats']:,} with usable player stats</span></div>
+<div class="meta"><span>Snapshot: {escape(snapshot)}</span><span>Retrieved: {escape(retrieval)}</span><span>{sample['metadata_matches']:,} charted matches in filter</span><span>{sample['matches_with_stats']:,} with usable player stats</span></div>
 <div class="table-wrap"><table><thead><tr>{''.join(headings)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+<h2>Season coverage</h2>
+<p class="note">How many charted matches for each player have a usable stats row? A sparse season can sway pooled rates; a missing season had no charted match in this filter.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Player</th><th scope="col">Season</th><th scope="col">Charted</th><th scope="col">With stats</th><th scope="col">Missing stats</th></tr></thead><tbody>{''.join(coverage_rows)}</tbody></table></div>
 <div class="note">{interval_note}<p>Rates pool points from each player’s charted matches against all opponents. This is not a head-to-head comparison or a ranking. Volunteer charting coverage varies by player and filter.</p>
+<p>The retrieval date describes the downloaded snapshot, not when a match was played.</p>
 <p>Data: <a href="https://github.com/JeffSackmann/tennis_MatchChartingProject">Match Charting Project</a> (CC BY-NC-SA 4.0).</p></div>
 </main>
 </body>
@@ -309,9 +335,13 @@ def main():
         parser.exit(2, f"{error}\n")
     if args.html:
         try:
+            manifest = args.folder / "manifest.json"
+            retrieved_at = None
+            if manifest.exists():
+                retrieved_at = json.loads(manifest.read_text(encoding="utf-8")).get("retrieved_at")
             args.html.parent.mkdir(parents=True, exist_ok=True)
-            args.html.write_text(format_html(result, args.folder.name), encoding="utf-8")
-        except OSError as error:
+            args.html.write_text(format_html(result, args.folder.name, retrieved_at), encoding="utf-8")
+        except (OSError, ValueError) as error:
             parser.exit(2, f"Could not save HTML: {error}\n")
         print(args.html)
     elif args.markdown:
