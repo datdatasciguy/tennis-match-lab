@@ -1,6 +1,7 @@
 import argparse
 import json
 from datetime import datetime
+from difflib import get_close_matches
 from html import escape
 from pathlib import Path
 from random import Random
@@ -88,6 +89,15 @@ def summarize(rows):
     }
 
 
+def player_names(rows):
+    return sorted({row["player"] for row in rows})
+
+
+def find_player_names(query, names):
+    matches = [name for name in names if query.casefold() in name.casefold()]
+    return matches[:12] if matches else get_close_matches(query, names, n=5, cutoff=0.5)
+
+
 def percentile(values, fraction):
     ordered = sorted(values)
     position = (len(ordered) - 1) * fraction
@@ -138,6 +148,14 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
     if bootstrap and not 0 < confidence < 1:
         raise ValueError("Confidence must be between 0 and 1")
     matches, rows, audit = load_data(folder, tour)
+    if not players or len(set(players)) != len(players):
+        raise ValueError("Choose distinct player names")
+    names = player_names(rows)
+    for player in players:
+        if player not in names:
+            suggestions = find_player_names(player, names)
+            hint = f" Try: {', '.join(suggestions)}" if suggestions else ""
+            raise ValueError(f"No usable stats for exact player name {player!r}.{hint}")
     matches = filter_matches(matches, surface, from_date, before)
     surfaces = normalized_surfaces(surface)
     matches_with_stats = {row["match_id"] for row in rows
@@ -310,7 +328,9 @@ def main():
     # Arguments
     parser = argparse.ArgumentParser(description="Compare players in the charted-match sample.")
     parser.add_argument("folder", type=Path)
-    parser.add_argument("players", nargs="+")
+    parser.add_argument("players", nargs="*")
+    parser.add_argument("--find-player", metavar="TEXT",
+                        help="List source player names containing this text")
     parser.add_argument("--tour", choices=["m", "w"], default="m")
     parser.add_argument("--surface", action="append", help="Repeat to include multiple surfaces")
     parser.add_argument("--from-date", help="Inclusive start date, YYYYMMDD")
@@ -327,6 +347,15 @@ def main():
     format_group.add_argument("--html", type=Path,
                               help="Save a local HTML comparison to this path")
     args = parser.parse_args()
+    if args.find_player is not None:
+        if args.players:
+            parser.error("Use --find-player without player names")
+        if not args.find_player.strip():
+            parser.error("Player search text cannot be empty")
+        _, rows, _ = load_data(args.folder, args.tour)
+        print("\n".join(find_player_names(args.find_player, player_names(rows)))
+              or "No close player names found")
+        return
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
                          args.before, args.from_date, args.bootstrap,

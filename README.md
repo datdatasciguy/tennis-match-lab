@@ -30,6 +30,11 @@ Repeat `--surface` to include more than one. `--from-date` includes its date;
 passed the filters, how many have player stats, and each player's match and point
 counts. These samples can be uneven, so check the counts before comparing rates.
 
+Player names must match the source exactly. To find one without guessing at
+spelling, run `python compare.py data/raw/<source-commit> --find-player "Nadal"`.
+An unknown name gets suggestions instead of silently returning a zero-match
+comparison. Similar names stay separate; the tool does not merge aliases.
+
 For a feel for how much the pooled rates move when matches are resampled:
 
 ```bash
