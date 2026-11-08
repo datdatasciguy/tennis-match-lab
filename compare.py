@@ -174,15 +174,19 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
     coverage = {}
     for player, player_rows in selected.items():
         stat_ids = {row["match_id"] for row in player_rows}
-        seasons = {}
+        groups = {}
         for match_id, match in matches.items():
             if player not in {match["Player 1"], match["Player 2"]}:
                 continue
-            season = match["Date"][:4]
-            counts = seasons.setdefault(season, {"charted": 0, "with_stats": 0})
+            key = (match["Date"][:4], match["Surface"])
+            counts = groups.setdefault(key, {"charted": 0, "with_stats": 0})
             counts["charted"] += 1
             counts["with_stats"] += match_id in stat_ids
-        coverage[player] = dict(sorted(seasons.items()))
+        coverage[player] = [
+            {"season": season, "surface": court, **counts,
+             "stats_coverage": counts["with_stats"] / counts["charted"]}
+            for (season, court), counts in sorted(groups.items())
+        ]
     if bootstrap:
         for player, player_rows in selected.items():
             summaries[player]["intervals"] = bootstrap_intervals(
@@ -275,13 +279,23 @@ def format_html(result, snapshot, retrieved_at=None):
         interval_note = f"<p>Intervals use {confidence:.0%} match-level bootstrap resampling.</p>"
     sample = result["sample"]
     coverage_rows = []
-    for player, seasons in result["coverage"].items():
-        for season, counts in seasons.items():
+    for player, groups in result["coverage"].items():
+        for counts in groups:
             coverage_rows.append(
-                f"<tr><th scope='row'>{escape(player)}</th><td>{season}</td>"
+                f"<tr><th scope='row'>{escape(player)}</th>"
+                f"<td>{escape(counts['season'])}</td><td>{escape(counts['surface'])}</td>"
                 f"<td>{counts['charted']:,}</td><td>{counts['with_stats']:,}</td>"
-                f"<td>{counts['charted'] - counts['with_stats']:,}</td></tr>"
+                f"<td>{counts['charted'] - counts['with_stats']:,}</td>"
+                f"<td>{counts['stats_coverage']:.1%}</td></tr>"
             )
+        total_charted = sum(row["charted"] for row in groups)
+        total_stats = sum(row["with_stats"] for row in groups)
+        total_coverage = f"{total_stats / total_charted:.1%}" if total_charted else "n/a"
+        coverage_rows.append(
+            f"<tr><th scope='row'>{escape(player)} total</th><td>All</td><td>All</td>"
+            f"<td>{total_charted:,}</td><td>{total_stats:,}</td>"
+            f"<td>{total_charted - total_stats:,}</td><td>{total_coverage}</td></tr>"
+        )
     retrieval = retrieved_at[:10] if isinstance(retrieved_at, str) else "unavailable"
     return f"""<!doctype html>
 <html lang="en">
@@ -312,9 +326,9 @@ a {{ color: #145e42; }}
 <p class="intro">{escape(selection)}</p>
 <div class="meta"><span>Snapshot: {escape(snapshot)}</span><span>Retrieved: {escape(retrieval)}</span><span>{sample['metadata_matches']:,} charted matches in filter</span><span>{sample['matches_with_stats']:,} with usable player stats</span></div>
 <div class="table-wrap"><table><thead><tr>{''.join(headings)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>
-<h2>Season coverage</h2>
-<p class="note">How many charted matches for each player have a usable stats row? A sparse season can sway pooled rates; a missing season had no charted match in this filter.</p>
-<div class="table-wrap"><table><thead><tr><th scope="col">Player</th><th scope="col">Season</th><th scope="col">Charted</th><th scope="col">With stats</th><th scope="col">Missing stats</th></tr></thead><tbody>{''.join(coverage_rows)}</tbody></table></div>
+<h2>Season and surface coverage</h2>
+<p class="note">Each row shows how much of that player's charted sample has usable stats. Sparse seasons or surfaces can sway pooled rates; a missing row means no charted match passed the filters.</p>
+<div class="table-wrap"><table><thead><tr><th scope="col">Player</th><th scope="col">Season</th><th scope="col">Surface</th><th scope="col">Charted</th><th scope="col">With stats</th><th scope="col">Missing stats</th><th scope="col">Coverage</th></tr></thead><tbody>{''.join(coverage_rows)}</tbody></table></div>
 <div class="note">{interval_note}<p>Rates pool points from each player’s charted matches against all opponents. This is not a head-to-head comparison or a ranking. Volunteer charting coverage varies by player and filter.</p>
 <p>The retrieval date describes the downloaded snapshot, not when a match was played.</p>
 <p>Data: <a href="https://github.com/JeffSackmann/tennis_MatchChartingProject">Match Charting Project</a> (CC BY-NC-SA 4.0).</p></div>
