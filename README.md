@@ -29,6 +29,10 @@ Repeat `--surface` to include more than one. `--from-date` includes its date;
 `--before` stops just short of its date. The output shows how many charted matches
 passed the filters, how many have player stats, and each player's match and point
 counts. These samples can be uneven, so check the counts before comparing rates.
+Players below 10 charted matches or 200 serve/return points get a visible
+sample flag in JSON, Markdown, and HTML. Their rates stay in view; the flag is
+a review cue, not a claim about statistical reliability. Change the cutoffs
+with `--min-matches` and `--min-points`.
 
 Player names must match the source exactly. To find one without guessing at
 spelling, run `python compare.py data/raw/<source-commit> --find-player "Nadal"`.

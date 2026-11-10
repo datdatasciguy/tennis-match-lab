@@ -89,6 +89,20 @@ def summarize(rows):
     }
 
 
+def match_count(count):
+    return f"{count} {'match' if count == 1 else 'matches'}"
+
+
+def sample_flags(summary, min_matches, min_points):
+    flags = []
+    if summary["matches"] < min_matches:
+        flags.append(f"{match_count(summary['matches'])} (under {min_matches})")
+    for label, key in (("serve points", "serve_points"), ("return points", "return_points")):
+        if summary[key] < min_points:
+            flags.append(f"{summary[key]} {label} (under {min_points})")
+    return flags
+
+
 def player_names(rows):
     return sorted({row["player"] for row in rows})
 
@@ -140,13 +154,15 @@ def bootstrap_intervals(rows, draws=2000, confidence=0.95, seed=42):
 
 
 def compare(folder, players, tour="m", surface=None, before=None, from_date=None,
-            bootstrap=0, confidence=0.95, seed=42):
+            bootstrap=0, confidence=0.95, seed=42, min_matches=10, min_points=200):
     if tour not in {"m", "w"}:
         raise ValueError("Tour must be m or w")
     if bootstrap and bootstrap < 100:
         raise ValueError("Bootstrap draws must be at least 100")
     if bootstrap and not 0 < confidence < 1:
         raise ValueError("Confidence must be between 0 and 1")
+    if min_matches < 1 or min_points < 1:
+        raise ValueError("Sample minimums must be positive")
     matches, rows, audit = load_data(folder, tour)
     if not players or len(set(players)) != len(players):
         raise ValueError("Choose distinct player names")
@@ -171,6 +187,8 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
             continue
         selected[player].append(row)
     summaries = {player: summarize(player_rows) for player, player_rows in selected.items()}
+    for summary in summaries.values():
+        summary["sample_flags"] = sample_flags(summary, min_matches, min_points)
     coverage = {}
     for player, player_rows in selected.items():
         stat_ids = {row["match_id"] for row in player_rows}
@@ -196,6 +214,7 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
                     "from_date": from_date, "before": before},
         "sample": {"metadata_matches": len(matches),
                    "matches_with_stats": len(matches_with_stats)},
+        "sample_minimums": {"matches": min_matches, "points": min_points},
         "players": summaries,
         "coverage": coverage,
         "audit": audit,
@@ -208,9 +227,11 @@ def format_markdown(result):
     for player, values in players.items():
         safe_name = player.replace("|", "\\|")
         headings.append(
-            f"{safe_name}<br>{values['matches']} matches, "
+            f"{safe_name}<br>{match_count(values['matches'])}, "
             f"{values['serve_points']:,} serve pts, "
             f"{values['return_points']:,} return pts"
+            + ("<br>Review sample: " + "; ".join(values["sample_flags"])
+               if values["sample_flags"] else "")
         )
     lines = ["| Rate | " + " | ".join(headings) + " |",
              "| --- | " + " | ".join("---" for _ in players) + " |"]
@@ -248,9 +269,13 @@ def format_html(result, snapshot, retrieved_at=None):
     selection = f"{filters['tour'].upper()} tour · {surfaces} · {dates}"
     headings = ["<th scope='col'>Rate</th>"]
     for player, values in players.items():
+        warning = (f"<small class='sample-warning'>Review sample: "
+                   f"{escape('; '.join(values['sample_flags']))}</small>"
+                   if values["sample_flags"] else "")
         headings.append(
-            f"<th scope='col'>{escape(player)}<small>{values['matches']:,} matches · "
-            f"{values['serve_points']:,} serve pts · {values['return_points']:,} return pts</small></th>"
+            f"<th scope='col'>{escape(player)}<small>{match_count(values['matches'])} · "
+            f"{values['serve_points']:,} serve pts · {values['return_points']:,} return pts</small>"
+            f"{warning}</th>"
         )
     rows = []
     for name in RATE_COLUMNS:
@@ -316,6 +341,7 @@ th, td {{ min-width: 130px; padding: 14px; border-bottom: 1px solid #e1e9e2; ver
 thead th {{ background: #e4eee6; }}
 tbody tr:last-child th, tbody tr:last-child td {{ border-bottom: 0; }}
 small {{ display: block; color: #4c6557; font-size: 12px; font-weight: normal; }}
+.sample-warning {{ color: #8c4b12; font-weight: 600; }}
 .note {{ max-width: 760px; color: #40584e; }}
 a {{ color: #145e42; }}
 </style>
@@ -326,6 +352,7 @@ a {{ color: #145e42; }}
 <p class="intro">{escape(selection)}</p>
 <div class="meta"><span>Snapshot: {escape(snapshot)}</span><span>Retrieved: {escape(retrieval)}</span><span>{sample['metadata_matches']:,} charted matches in filter</span><span>{sample['matches_with_stats']:,} with usable player stats</span></div>
 <div class="table-wrap"><table><thead><tr>{''.join(headings)}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+<p class="note">Sample flags use review cutoffs of {result['sample_minimums']['matches']} matches and {result['sample_minimums']['points']} serve or return points. Rates remain visible; these cutoffs do not certify reliability.</p>
 <h2>Season and surface coverage</h2>
 <p class="note">Each row shows how much of that player's charted sample has usable stats. Sparse seasons or surfaces can sway pooled rates; a missing row means no charted match passed the filters.</p>
 <div class="table-wrap"><table><thead><tr><th scope="col">Player</th><th scope="col">Season</th><th scope="col">Surface</th><th scope="col">Charted</th><th scope="col">With stats</th><th scope="col">Missing stats</th><th scope="col">Coverage</th></tr></thead><tbody>{''.join(coverage_rows)}</tbody></table></div>
@@ -355,6 +382,10 @@ def main():
                         help="Interval level when bootstrapping (default: 0.95)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for repeatable intervals (default: 42)")
+    parser.add_argument("--min-matches", type=int, default=10,
+                        help="Flag players below this many charted matches (default: 10)")
+    parser.add_argument("--min-points", type=int, default=200,
+                        help="Flag serve or return samples below this many points (default: 200)")
     format_group = parser.add_mutually_exclusive_group()
     format_group.add_argument("--markdown", action="store_true",
                               help="Print a comparison table instead of JSON")
@@ -373,7 +404,7 @@ def main():
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
                          args.before, args.from_date, args.bootstrap,
-                         args.confidence, args.seed)
+                         args.confidence, args.seed, args.min_matches, args.min_points)
     except ValueError as error:
         parser.exit(2, f"{error}\n")
     if args.html:
