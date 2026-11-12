@@ -29,6 +29,12 @@ Repeat `--surface` to include more than one. `--from-date` includes its date;
 `--before` stops just short of its date. The output shows how many charted matches
 passed the filters, how many have player stats, and each player's match and point
 counts. These samples can be uneven, so check the counts before comparing rates.
+The JSON audit also counts missing opponent overview rows, serve/return totals
+that disagree between opponents, and suspicious serve, return, or break-point
+counts. Malformed or negative count rows are skipped; other flagged rows stay
+visible for review. Audit counts cover the downloaded tour snapshot before
+player, surface, or date filters.
+
 Players below 10 charted matches or 200 serve/return points get a visible
 sample flag in JSON, Markdown, and HTML. Their rates stay in view; the flag is
 a review cue, not a claim about statistical reliability. Change the cutoffs

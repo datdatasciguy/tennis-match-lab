@@ -3,6 +3,9 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+COUNT_FIELDS = ("serve_pts", "aces", "dfs", "first_in", "first_won", "second_won",
+                "return_pts", "return_pts_won", "bk_pts", "bp_saved")
+
 def read_csv(path):
     with Path(path).open(encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
@@ -34,6 +37,27 @@ def unique_rows(rows, key, audit, label):
     audit[label + "_conflicting_keys"] = len(conflicts)
     return accepted, conflicts
 
+def overview_count_issues(row):
+    try:
+        counts = {name: int(row[name]) for name in COUNT_FIELDS}
+    except (KeyError, TypeError, ValueError):
+        return ["invalid_number"]
+    if any(value < 0 for value in counts.values()):
+        return ["negative_number"]
+    issues = []
+    if counts["aces"] > counts["serve_pts"] or counts["first_in"] > counts["serve_pts"]:
+        issues.append("serve_total")
+    if counts["first_won"] > counts["first_in"]:
+        issues.append("first_serve_won")
+    second_serves = counts["serve_pts"] - counts["first_in"]
+    if counts["dfs"] > second_serves or counts["second_won"] > second_serves:
+        issues.append("second_serve_total")
+    if counts["return_pts_won"] > counts["return_pts"]:
+        issues.append("return_total")
+    if counts["bp_saved"] > counts["bk_pts"]:
+        issues.append("break_points")
+    return issues
+
 def load_data(folder, tour):
     folder = Path(folder)
     audit = Counter()
@@ -62,7 +86,27 @@ def load_data(folder, tour):
         elif player not in {matches[match_id]["Player 1"], matches[match_id]["Player 2"]}:
             audit["overview_player_mismatches"] += 1
         else:
+            issues = overview_count_issues(row)
+            for issue in issues:
+                audit["overview_issue_" + issue] += 1
+            if any(issue in {"invalid_number", "negative_number"} for issue in issues):
+                audit["overview_rows_with_invalid_counts"] += 1
+                continue
+            if issues:
+                audit["overview_rows_with_suspicious_counts"] += 1
             usable.append(row)
+    by_match = defaultdict(dict)
+    for row in usable:
+        by_match[row["match_id"]][row["player"]] = row
+    for match_id, match in matches.items():
+        first, second = match["Player 1"], match["Player 2"]
+        rows = by_match[match_id]
+        if first not in rows or second not in rows:
+            audit["matches_missing_opponent_overview"] += 1
+            continue
+        if (int(rows[first]["serve_pts"]) != int(rows[second]["return_pts"])
+                or int(rows[second]["serve_pts"]) != int(rows[first]["return_pts"])):
+            audit["matches_with_serve_return_mismatch"] += 1
     audit["usable_metadata_matches"] = len(matches)
     audit["usable_overview_rows"] = len(usable)
     return matches, usable, dict(audit)
