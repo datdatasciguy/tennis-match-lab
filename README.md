@@ -146,6 +146,17 @@ when its own denominator is below 30; change that display cutoff with
 lengths or a rating of player ability. Run the reconciliation above before
 assuming point rows and match summaries agree for a particular sample.
 
+To compare the rates behind two or more style vectors on the same slice:
+
+```bash
+python style_compare.py data/raw/<source-commit> "Roger Federer" "Rafael Nadal" --surface Grass --from-date 20100101 --before 20200101
+```
+
+The JSON shows each rate's absolute gap and separate averages for overview
+rates and shot-code shares. A block's average is `null` if a required rate is
+missing; the other rates and sample flags remain visible. These gaps describe
+the charted sample, not overall playing ability or who is the better player.
+
 ## A couple of details
 
 The rates come from total points, rather than averaging match percentages.
