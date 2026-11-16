@@ -157,6 +157,11 @@ rates and shot-code shares. A block's average is `null` if a required rate is
 missing; the other rates and sample flags remain visible. These gaps describe
 the charted sample, not overall playing ability or who is the better player.
 
+Add `--html data/grass-styles.html` to save a local, readable comparison with
+sample counts, rate gaps, and missing-rate notices. The report stays in the
+ignored data folder. Choose a new filename for each run so earlier reports
+remain available.
+
 ## A couple of details
 
 The rates come from total points, rather than averaging match percentages.
