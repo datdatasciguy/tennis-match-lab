@@ -29,6 +29,12 @@ Repeat `--surface` to include more than one. `--from-date` includes its date;
 `--before` stops just short of its date. The output shows how many charted matches
 passed the filters, how many have player stats, and each player's match and point
 counts. These samples can be uneven, so check the counts before comparing rates.
+
+To look only at charted matches between the two named players, add
+`--head-to-head`. It works with the date and surface filters and labels the
+narrower sample in JSON, Markdown, and HTML. If none pass, the rates stay
+unavailable and the sample count is zero; this does not mean they never played.
+
 The JSON audit also counts missing opponent overview rows, serve/return totals
 that disagree between opponents, and suspicious serve, return, or break-point
 counts. Malformed or negative count rows are skipped; other flagged rows stay

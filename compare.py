@@ -154,7 +154,8 @@ def bootstrap_intervals(rows, draws=2000, confidence=0.95, seed=42):
 
 
 def compare(folder, players, tour="m", surface=None, before=None, from_date=None,
-            bootstrap=0, confidence=0.95, seed=42, min_matches=10, min_points=200):
+            bootstrap=0, confidence=0.95, seed=42, min_matches=10, min_points=200,
+            head_to_head=False):
     if tour not in {"m", "w"}:
         raise ValueError("Tour must be m or w")
     if bootstrap and bootstrap < 100:
@@ -163,6 +164,8 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
         raise ValueError("Confidence must be between 0 and 1")
     if min_matches < 1 or min_points < 1:
         raise ValueError("Sample minimums must be positive")
+    if head_to_head and len(players) != 2:
+        raise ValueError("Head-to-head needs exactly two player names")
     matches, rows, audit = load_data(folder, tour)
     if not players or len(set(players)) != len(players):
         raise ValueError("Choose distinct player names")
@@ -173,6 +176,10 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
             hint = f" Try: {', '.join(suggestions)}" if suggestions else ""
             raise ValueError(f"No usable stats for exact player name {player!r}.{hint}")
     matches = filter_matches(matches, surface, from_date, before)
+    if head_to_head:
+        chosen = set(players)
+        matches = {match_id: match for match_id, match in matches.items()
+                   if {match["Player 1"], match["Player 2"]} == chosen}
     surfaces = normalized_surfaces(surface)
     matches_with_stats = {row["match_id"] for row in rows
                           if row["match_id"] in matches}
@@ -211,7 +218,8 @@ def compare(folder, players, tour="m", surface=None, before=None, from_date=None
                 player_rows, bootstrap, confidence, seed)
     return {
         "filters": {"tour": tour, "surfaces": sorted(surfaces) if surfaces else None,
-                    "from_date": from_date, "before": before},
+                    "from_date": from_date, "before": before,
+                    "head_to_head": head_to_head},
         "sample": {"metadata_matches": len(matches),
                    "matches_with_stats": len(matches_with_stats)},
         "sample_minimums": {"matches": min_matches, "points": min_points},
@@ -233,7 +241,8 @@ def format_markdown(result):
             + ("<br>Review sample: " + "; ".join(values["sample_flags"])
                if values["sample_flags"] else "")
         )
-    lines = ["| Rate | " + " | ".join(headings) + " |",
+    lines = (["Charted head-to-head matches only.\n"] if result["filters"].get("head_to_head") else [])
+    lines += ["| Rate | " + " | ".join(headings) + " |",
              "| --- | " + " | ".join("---" for _ in players) + " |"]
     for name in RATE_COLUMNS:
         cells = []
@@ -266,7 +275,9 @@ def format_html(result, snapshot, retrieved_at=None):
     filters = result["filters"]
     surfaces = ", ".join(filters["surfaces"]) if filters["surfaces"] else "All surfaces"
     dates = f"{filters['from_date'] or 'earliest'} to before {filters['before'] or 'latest'}"
-    selection = f"{filters['tour'].upper()} tour · {surfaces} · {dates}"
+    scope = ("Head-to-head charted matches" if filters.get("head_to_head")
+             else "Charted matches against all opponents")
+    selection = f"{filters['tour'].upper()} tour · {surfaces} · {dates} · {scope}"
     headings = ["<th scope='col'>Rate</th>"]
     for player, values in players.items():
         warning = (f"<small class='sample-warning'>Review sample: "
@@ -356,7 +367,7 @@ a {{ color: #145e42; }}
 <h2>Season and surface coverage</h2>
 <p class="note">Each row shows how much of that player's charted sample has usable stats. Sparse seasons or surfaces can sway pooled rates; a missing row means no charted match passed the filters.</p>
 <div class="table-wrap"><table><thead><tr><th scope="col">Player</th><th scope="col">Season</th><th scope="col">Surface</th><th scope="col">Charted</th><th scope="col">With stats</th><th scope="col">Missing stats</th><th scope="col">Coverage</th></tr></thead><tbody>{''.join(coverage_rows)}</tbody></table></div>
-<div class="note">{interval_note}<p>Rates pool points from each player’s charted matches against all opponents. This is not a head-to-head comparison or a ranking. Volunteer charting coverage varies by player and filter.</p>
+<div class="note">{interval_note}<p>{'Rates pool points from charted matches between these two players.' if filters.get('head_to_head') else 'Rates pool points from each player’s charted matches against all opponents.'} Volunteer charting coverage varies by player and filter. This is not a ranking.</p>
 <p>The retrieval date describes the downloaded snapshot, not when a match was played.</p>
 <p>Data: <a href="https://github.com/JeffSackmann/tennis_MatchChartingProject">Match Charting Project</a> (CC BY-NC-SA 4.0).</p></div>
 </main>
@@ -376,6 +387,8 @@ def main():
     parser.add_argument("--surface", action="append", help="Repeat to include multiple surfaces")
     parser.add_argument("--from-date", help="Inclusive start date, YYYYMMDD")
     parser.add_argument("--before", help="Exclusive date cutoff, YYYYMMDD")
+    parser.add_argument("--head-to-head", action="store_true",
+                        help="Use only charted matches between exactly two named players")
     parser.add_argument("--bootstrap", type=int, default=0,
                         help="Match-level resamples for pooled-rate intervals (at least 100)")
     parser.add_argument("--confidence", type=float, default=0.95,
@@ -404,7 +417,8 @@ def main():
     try:
         result = compare(args.folder, args.players, args.tour, args.surface,
                          args.before, args.from_date, args.bootstrap,
-                         args.confidence, args.seed, args.min_matches, args.min_points)
+                         args.confidence, args.seed, args.min_matches, args.min_points,
+                         args.head_to_head)
     except ValueError as error:
         parser.exit(2, f"{error}\n")
     if args.html:
