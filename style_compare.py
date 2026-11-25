@@ -94,6 +94,8 @@ def format_html(result):
                      f"<div class='scroll'><table><thead><tr><th>Rate</th><th>{escape(names[0])}</th>"
                      f"<th>{escape(names[1])}</th><th>Absolute gap</th></tr></thead><tbody>"
                      f"{''.join(rows)}</tbody></table></div></section>")
+    scope = ("head-to-head matches only" if filters.get("head_to_head")
+             else "matches against all opponents")
     return f"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Charted tennis style comparison</title>
@@ -106,7 +108,7 @@ th,td{{border-bottom:1px solid #d6dfe2;padding:10px;vertical-align:top}}td{{min-
 th small{{display:block;color:#536572;font-weight:normal}}.bar{{display:block;background:#3d85a4;height:7px;min-width:2px;margin-top:5px}}
 </style>
 <h1>Charted tennis style comparison</h1>
-<p class="intro">{escape(filters['tour'].upper())} tour · {escape(surfaces)} · {escape(period)}. Gaps are absolute percentage-point differences in this volunteer-charted sample. Overview and shot-code coverage differ; these numbers do not rank player ability.</p>
+<p class="intro">{escape(filters['tour'].upper())} tour · {escape(surfaces)} · {escape(period)} · {scope}. Gaps are absolute percentage-point differences in this volunteer-charted sample. Overview and shot-code coverage differ; these numbers do not rank player ability.</p>
 <p>Shot rates require at least {result['point_minimum']} coded points or returns; overview samples below {result['match_minimum']} matches are flagged. An average is missing if any rate in that block is unavailable.</p>
 {''.join(cards)}
 </html>"""
@@ -119,15 +121,19 @@ def main():
     parser.add_argument("--surface", action="append")
     parser.add_argument("--from-date")
     parser.add_argument("--before")
+    parser.add_argument("--head-to-head", action="store_true",
+                        help="Use only charted matches between exactly two named players")
     parser.add_argument("--minimum", type=int, default=30, help="Minimum coded points or returns for a shot rate")
     parser.add_argument("--min-matches", type=int, default=10, help="Flag smaller overview match samples")
     parser.add_argument("--html", type=Path, help="Save a local HTML report under ignored data/ or outputs/")
     args = parser.parse_args()
     if len(args.players) < 2:
         parser.error("Choose at least two distinct players")
+    if args.head_to_head and len(args.players) != 2:
+        parser.error("Head-to-head needs exactly two player names")
     try:
         vectors = build_vectors(args.folder, args.players, args.tour, args.surface,
-                                args.from_date, args.before, args.minimum)
+                                args.from_date, args.before, args.minimum, args.head_to_head)
         result = compare_styles(vectors, args.min_matches)
         if args.html:
             output = args.html.resolve()

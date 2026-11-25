@@ -163,6 +163,12 @@ rates and shot-code shares. A block's average is `null` if a required rate is
 missing; the other rates and sample flags remain visible. These gaps describe
 the charted sample, not overall playing ability or who is the better player.
 
+Add `--head-to-head` to either style command when comparing exactly two players.
+It limits the overview and shot-code samples to their charted meetings, then
+labels that scope in the JSON and HTML. Check the counts carefully: a narrow
+head-to-head slice can leave shot rates unavailable at the minimum of 30 coded
+points or returns.
+
 Add `--html data/grass-styles.html` to save a local, readable comparison with
 sample counts, rate gaps, and missing-rate notices. The report stays in the
 ignored data folder. Choose a new filename for each run so earlier reports

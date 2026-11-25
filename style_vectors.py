@@ -63,15 +63,21 @@ def point_samples(folder, tour, matches, players):
     return samples, dict(audit)
 
 def build_vectors(folder, players, tour="m", surface=None, from_date=None,
-                  before=None, minimum=30):
+                  before=None, minimum=30, head_to_head=False):
     if tour not in {"m", "w"}:
         raise ValueError("Tour must be m or w")
     if minimum < 1:
         raise ValueError("Minimum must be positive")
     if not players or len(players) != len(set(players)):
         raise ValueError("Choose distinct player names")
+    if head_to_head and len(players) != 2:
+        raise ValueError("Head-to-head needs exactly two player names")
     matches, overview, source_audit = load_data(folder, tour)
     matches = filter_matches(matches, surface, from_date, before)
+    if head_to_head:
+        chosen = set(players)
+        matches = {match_id: match for match_id, match in matches.items()
+                   if {match["Player 1"], match["Player 2"]} == chosen}
     selected = set(players)
     rows = {name: [] for name in players}
     for row in overview:
@@ -107,7 +113,8 @@ def build_vectors(folder, players, tour="m", surface=None, from_date=None,
     return {
         "filters": {"tour": tour,
                     "surfaces": sorted(normalized_surfaces(surface)) if surface else None,
-                    "from_date": from_date, "before": before},
+                    "from_date": from_date, "before": before,
+                    "head_to_head": head_to_head},
         "minimum": minimum,
         "metadata_matches": len(matches),
         "players": vectors,
@@ -123,10 +130,14 @@ def main():
     parser.add_argument("--surface", action="append")
     parser.add_argument("--from-date")
     parser.add_argument("--before")
+    parser.add_argument("--head-to-head", action="store_true",
+                        help="Use only charted matches between exactly two named players")
     parser.add_argument("--minimum", type=int, default=30)
     args = parser.parse_args()
+    if args.head_to_head and len(args.players) != 2:
+        parser.error("Head-to-head needs exactly two player names")
     result = build_vectors(args.folder, args.players, args.tour, args.surface,
-                           args.from_date, args.before, args.minimum)
+                           args.from_date, args.before, args.minimum, args.head_to_head)
     print(json.dumps(result, indent=2))
 
 if __name__ == "__main__":
